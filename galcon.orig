@@ -1,0 +1,1020 @@
+/*
+ * GALCON.C -- Galactic Conquest
+ *
+ * Version update Notes
+ *
+ * v2.2	 by Stan Bartsch (date unknown)
+ * v2.21 by David E. Brooks Jr (29-Dec-86)
+ *       - Changed displays to allow names to be displayed instead
+ *         of player's numbers.  Also, added <K>wick command, Convienient
+ *         means of changing certain game parameters and fixed bug in
+ *         root() function.  Time displays were changed to a shorter format.
+ *
+ * v2.22 by David E. Brooks Jr (16-Jan-87)
+ *	 - Added the Zend (send) command.
+ * 
+ * v2.23 by David E. Brooks Jr (11-Mar-87)
+ *       - Changed initialization code to deny entrance to the game
+ *         after the first 20 minutes have elapsed.
+ *
+ */
+
+#include <stdio.h>
+#include <rsts.h>
+
+int $$narg=1;
+
+/*Declare all the shared variables */
+
+ extern long start;
+ extern int xpos[50],ypos[50],zpos[50],owner[50],produ[50],ships[50],game;
+ extern long lstup[50],credit[10];
+ extern int meslok,mesnum,combat[10][2],comnum;
+ extern char names[10][20],public[5][100],passwd[10][10],status[10];
+ extern int pppn[20],pnppn[20];
+
+/*Declare all my global variables */
+
+ int inchar,stack[99][2];
+ long events[99];
+ int mymes,mycom,mynum,home,myp,mypn, mykb;;
+ int numpl[10],numpr[10],numsh[10];
+ char scr[80], scr2[30];
+ long game_len;
+ int x_siz,y_siz,z_siz;
+ long prod_time, trav_time;
+
+/*
+ * sdate() - alternative function  for ctime()
+ */
+char *sdate(value)
+long value;
+{
+long timex, whole, decimal;
+extern long time();
+char *ptr;
+static char sdatebfr[10];
+
+if (value == 0L)
+{
+   timex = time(0) - start;
+}
+else
+{
+   timex = value - start; /* make the number reasonable to look at */
+}
+whole = timex/60L;
+decimal = timex - (whole * 60L);
+sprintf(sdatebfr,"%02ld.%02ld",whole,decimal);
+ptr = sdatebfr;
+return(ptr);
+}
+
+/*
+ * start of Main()
+ */
+
+main()
+{
+ long atol();
+ char *ctime();
+ int i,j,k;
+ extern long tod();
+ extern long time();
+ extern int wrapup();
+ long years;
+ setcc(wrapup);
+ printf("\nGALCON - Galactic Conquest (v2.22)\n");
+ 
+ getppn(&myp,&mypn,&mykb);
+ printf("\n");
+/*
+ if (time(0) > (start + 1200L))
+ {
+   printf("Sorry, this game has progressed past the initial 20\n");
+   printf("minutes -- Try again at a later time.\n\n");
+   exit(0);
+ }
+*/
+/*
+if ((fptr = fopen("[10,13]galcon.cfg","r")) == NULL)
+*/
+if (1 == 1)
+{
+   game_len = 4500L;	/* changes to desired values and recompile */
+   x_siz = 12;
+   y_siz = 12;
+   z_siz = 4;
+   prod_time = 45L;
+   trav_time = 30L;
+}
+
+/*
+else
+{
+   fgets(fptr,20,scr);
+   game_len = atol(scr);
+   if (game_len > 7200L) game_len = 5100L;
+   fgets(fptr,20,scr);
+   x_siz = atoi(scr);
+   if (x_siz > 30) x_siz = 15;
+   fgets(fptr,20,scr);
+   y_siz = atoi(scr);
+   if (y_siz > 30) y_siz = 15;
+   fgets(fptr,20,scr);
+   z_siz = atoi(scr);
+   if (z_siz > 15) z_siz = 5;
+   fgets(fptr,20,scr);
+   prod_time = atol(scr);
+   if (prod_time > 60L) prod_time = 45L;
+   fgets(fptr,20,scr);
+   trav_time = atol(scr);
+   if (trav_time > 60L) trav_tim = 30L;
+   fclose(fptr);
+}
+
+*/
+
+ printf("Game length is %ld minutes\n",game_len/60);
+
+ setrand();
+ if(game<0 || game>10) game=0;
+ if(meslok<0 || meslok>game) meslok=0;
+ lock();
+ if(game==0 || lstup[0]+300L < time(0) || lstup[0]>time(0))
+ {
+    setup();
+    game=0;
+ }
+ for (j=0;j<99;j++) events[j]=0L;
+ if (game>8)
+ {
+    printf("\nSorry, too many players as it is!\n");
+    $$fail();
+ }
+ for(i=0;i<20;i++)
+    if(pppn[i]==myp && pnppn[i]==mypn)
+    {
+       printf("\nSorry, you are locked out for the remainder of the game.\n");
+       $$fail();
+    }
+ mymes=mesnum; mycom=comnum;
+ game++;
+ home=0;mynum=0;
+ {
+   for(home=0;names[home][0]!='\0';home++);
+ }
+ names[home][0]='\n';
+ mynum=home;home=-1;
+ meslok--;
+
+ k=0;names[mynum][k]=1;
+while(names[mynum][0]==1)
+ {
+ k=0;
+ printf("\nEnter your name, please: ");
+  gets(scr);
+  scr[10] = 0; /* force an EOS */
+  sprintf(scr2,"%-10s [%3d,%-3d",scr,myp,mypn);
+  for (k = 0; k<20; k++)
+     names[mynum][k] = scr2[k];
+ }
+  lock();
+ printf("Type H for help.\n");
+ printf("\n\n");
+ home=-1;
+ while(home==-1)
+   {
+    k=irand(50);
+    if (owner[k]==-1)
+       {
+        owner[k]=mynum;
+        ships[k]=450;
+        produ[k]=15;
+        home=k;
+        }
+     }
+  printf("\nYour home planet is #%d, located at (%d,%d,%d)\n",
+    		home,xpos[home],ypos[home],zpos[home]);
+meslok--;
+  prompt();
+   inchar=0;
+  while(1==1)
+       {
+        inchar=kbinr(0);
+        if(inchar!=-1)
+	{
+	 putchar('\n');
+        }
+	inchar=tolower(inchar);
+        switch(inchar)
+          {
+           case -1: update();
+ 		    sleep(1);
+   		    goto endinc;
+	   case 'h': help();
+		     goto endinc;
+ 	   case 'b': broadcast();
+		     goto endinc;
+	   case 'i': individual();
+		     goto endinc;
+           case 'k': kwick();
+                     goto endinc;
+	   case 'o': oneplanet();
+		     goto endinc;
+	   case 'p': private();
+		     goto endinc;
+	   case 'm': clrgam();
+		     goto endinc;
+	   case 't': printf("\nCurrent time is %s\n",sdate(0L));
+		     years= (time(0) - start)/60L;
+		     printf("Years           %ld\n",years);
+		     goto endinc;
+	   case 'a': area();
+		     goto endinc;
+       	   case 'f': flts();
+		     goto endinc;
+           case 'g': galaxy();
+		     goto endinc;
+	   case 'c': compute();
+		     goto endinc;
+	   case 'w': who();
+		     goto endinc;
+	   case 'l': list();
+		     goto endinc;
+           case 's': send();
+		     goto endinc;
+           case 'z': zend();		/* [2.22] */
+                     goto endinc;
+           case 'q': printf("\n%cAre you sure you want to Quit? ",7);
+		     k=getchar();
+		     k=tolower(k);
+		     while(getchar()!='\n');
+		     if(k=='y') exit(0);
+		     goto endinc;
+           endinc: fleets();
+		   chkend();
+		   if(mymes!=mesnum) getpub();
+		   if(mycom!=comnum) getcom();
+            }
+        if(inchar!=-1) prompt();
+        }
+}
+
+setrand()
+{
+ int j;
+ long loop;
+ loop=tod();
+ loop=loop % 3600L;
+ while(loop>0)
+	{
+	loop--;
+	j=irand(loop);
+	}
+ j=irand(irand(irand(j)));
+}
+
+chkend()
+{
+ int i,j,k;
+ j=0;k=0;
+ for(i=0;i<50;i++)
+    if(owner[i]==mynum) j++;
+ for(i=0;i<99;i++)
+    if(stack[i][0]!=0) k++;
+ if(j==0 && k==0)
+	{
+	printf("\nYou have lost this round.\n");
+	i=0;
+	while(pppn[i]!=0)i++;
+	pppn[i]=myp;
+	pnppn[i]=mypn;
+	exit(0);
+	}
+ if(j==50)
+	{
+	printf("\nYou have completely won the war!!\n");
+	game=0;
+	exit(0);
+	}
+
+ if(time(0)<start+game_len) return(0);
+
+ printf("\nThe War is OVER!\nTime limit exceeded");
+ printf("\nThe points break down as follows:\n");
+ for(i=0;i<10;i++)
+    {
+	numpl[i]=0; numpr[i]=0; numsh[0]=0;
+    }
+ for(i=0;i<50;i++)
+    if(owner[i]!=-1)
+	{
+	numpl[owner[i]]++; numpr[owner[i]]=numpr[owner[i]]+produ[i];
+	numsh[owner[i]]=numsh[owner[i]]+ships[i]; 
+	}
+    for(i=0;i<10;i++)
+      if((names[i][0] != '\0') && (names[i][0] != 1))
+	printf("%20s] Planets:%3d production:%4d Ships:%5d  Score:%6d\n",
+        names[i],numpl[i],numpr[i],numsh[i],(numpl[i]*10+numpr[i]*5+numsh[i]));
+    game--;
+    $$fail(0);
+}
+
+/*
+ * who() -- Display the names and PPN's of all player's in the game
+ */
+who()
+{
+int i;
+
+printf("\n");
+for(i = 0; i < 10; i++)
+{
+   if (names[i][0] != '\0')
+      printf("Player #%d %20s]\n",i,names[i]);
+}
+printf("\n");
+}
+
+prompt()
+{
+ printf("\nCommand: ");
+ fflush(stdout);
+}
+
+wrapup()
+{
+ int i;
+ for (i=0;i<50;i++) if (owner[i]==mynum) 
+                      {
+			owner[i]=-1;
+			if(produ[i]!=10)
+				produ[i]=prandom(10);
+		       }
+ names[mynum][0]='\0';
+
+ game--;
+ printf("\nBye Bye\n");
+ $$fail(1);
+}
+
+individual()
+{
+ int i,j;
+ printf("\nSummary of player #:");
+ i=getnum(&j);
+ printf("\n");
+ if(j>0 && j<10) printf("Name: %s]\n",names[j]);
+ for (i=0;i<50;i++)
+   if(owner[i]==j)
+     printf("Planet #%2d  Distance from #%2d = %4d\n",
+	    i,home,prange(home,i));
+
+ if (owner[home]!=mynum)
+	printf("\nNOTE: You no longer control your home world!\n");
+}
+
+/*
+ * Initialize the Game Board
+ */
+setup()
+{
+ int i;
+ mesnum=comnum=meslok=0;
+ start=time(0);
+ for(i=0;i<10;i++)names[i][0]='\0';
+ for(i=0;i<20;i++) pppn[i]=0;
+ 
+ for (i=0;i<50;i++)
+   {
+    owner[i]=-1;
+    xpos[i]=prandom(x_siz);
+    ypos[i]=prandom(y_siz);
+    zpos[i]=prandom(z_siz);
+    produ[i]=prandom(10);
+    lstup[i]=time(0);
+    ships[i]=prandom(produ[i]*25);
+   }
+ for(i=0;i<10;i++)
+    names[i][0]='\0';
+}
+
+area()
+{
+int base,vol,i;
+
+printf("\nBase Planet: ");
+i=getnum(&base);
+if(base<0 || base>49)
+   return(0);
+printf("Range: ");
+i=getnum(&vol);
+
+for(i=0;i<50;i++)
+   if(prange(base,i)<=vol)
+   {
+      printf("Planet #%3d Range=%3d ",i,prange(base,i));
+      if (owner[i] == (-1))
+         printf("Own= *Neutral*\n");
+      else
+         printf("Own = %s]\n",names[owner[i]]);
+    }
+}
+  
+
+prandom(range)
+int range;
+{
+   return(irand(range)+1);
+}
+
+help()
+{
+printf("Commands for Galactic Conquest (1.1)\n\n");
+
+
+printf("A - Area:       Area summary centered on a given world for a given range.\n");
+printf("B - Broadcast:  Send a message to all players.\n");
+printf("C - Compute:    Find distance between two planets.\n");
+printf("F - Fleet:      Show status of all my fleets in transit.\n");
+printf("G - Galaxy:     Dislplay status of entire galaxy.\n");
+printf("H - Help:       Print this handy-dandy text file.\n");
+printf("I - Individual: Display status of individual player.\n");
+printf("K - List:       List status of all my worlds.\n");
+printf("O - One Planet: Summary listing for a single planet.\n");
+printf("P - Private:    Send a message to one player.\n");
+printf("Q - Quit:       Exit the game.  All fleets are destroyed, all planets\n");
+printf("                become neutral.\n");
+printf("S - Send:       Send a fleet from one world to another.\n");
+printf("T - Time:       Time game has been going on in years and time of day.\n");
+printf("W - Who:        List who is playing the game.\n\n");
+
+printf("The Game . . . \n\n");
+
+printf("The object of the game is to take over the galaxy.  This is done by\n");
+printf("sending fleets from one planet to another in an attempt to capture\n");
+printf("them.  It takes 30 seconds per unit distance travel time.  So, if you\n");
+printf("send a fleet to a planet 5 units away, it takes 2.5 minutes.\n\n");
+
+printf("You may also send fleets to your own planets, in which case they re-inforce\n");
+printf("the ships already there.  You lose the game when you have no fleets in\n");
+printf("transit and own no planets.  You win when you own all the planets in the\n");
+printf("galaxy.\n\n");
+
+printf("Owners :  -1=neutral, 0-9 = other players.\n");
+printf("Production: 1-10 Tells how many ships per minute this planet will produce\n");
+printf("X,Y,Z co-ordinates: Tells where the planet is.\n");
+
+printf("Good luck!");
+
+}
+
+update()
+{
+ long now;
+ int i;
+ now=time(0);
+ for (i=0;i<50;i++)
+     if( lstup[i]<(now-45L) )
+       {
+        lstup[i]=now;
+        ships[i]=ships[i]+produ[i]*1;
+	if(owner[i]==-1 && ships[i]>250) ships[i]=250;
+        if(ships[i]>50*produ[i] && produ[i]<10) produ[i]++;
+	if(ships[i]>1500) ships[i]=1500;
+        }
+}
+
+galaxy()
+{
+ int i;
+ extern char *ctime();
+ printf("\nGalaxy status at %s\n\n",sdate(0L));
+ for (i=0;i<50;i++)
+   {
+      printf("#%2d (%2d,%2d,%2d) ",i, xpos[i], ypos[i], zpos[i]);
+      if (owner[i] == (-1))
+         printf("*Neutral*\n");
+      else
+         printf("%s]\n",names[owner[i]]);
+   }
+ printf("\n");
+}
+
+oneplanet()
+{
+ int i;
+ i=-1;
+ while(i<0 || i>49)
+ {
+ printf("\nWhich Planet: ");
+ getnum(&i);
+ }
+ if (owner[i] == (-1))
+    printf("#%2d Owner= *Neutral*\n",i);
+ else
+    printf("#%2d Owner= %s] ",i,names[owner[i]]);
+ if(owner[i]==mynum)
+   printf(" Prod:%3d Ships:%5d\n",produ[i],ships[i]);
+ else
+   printf("\n");
+}
+
+fleets()
+{
+ int i,j,k,l,m,flag;
+ int despla,desown,desarm,myarm;
+ long now;
+ now=time(0);
+ for (i=0;i<50;i++)
+   if (events[i]!=0L)
+      if (events[i]<now)
+        {
+	 myarm=stack[i][0];
+	 despla=stack[i][1];
+	 desown=owner[despla];
+	 desarm=ships[despla];
+	 if(mynum==desown)
+           {
+            printf("\nPlanet %d recieves reinforcements - Fleet# %d\n",
+		despla,i);
+	    ships[despla]=desarm+myarm;
+	   }
+         else
+           {
+	    printf("\nInvasion alert! Your fleet #%d has arrived at world %d",
+		i,despla);
+           printf("\nYour fleet has:%d\nDefending fleet has:%d",myarm,desarm);
+	   flag=0;
+	    lock();
+	    while(myarm>0 && desarm>0)
+            {
+		l=10;
+		l=l*myarm/desarm;
+	        if(l>18) l=18;
+		if(l<3) l=3;
+	    if(flag=0)
+		{
+		 flag=irand(5)+1;
+		 if(flag<=3) goto PREPARED;
+	        }
+	    while( (m=irand(myarm)+1) < myarm/2);
+	    for(j=0;j<m;j++)
+               if(desarm>0) 
+		if(irand(20)<=l) desarm--; 
+	PREPARED:
+	   if(desarm>0)
+		{
+		while( (m=irand(desarm)+1) < desarm/2);
+	    for(j=0;j<m;j++)
+		if(myarm>0)
+		  if(irand(20)>=l) myarm--;
+		}
+             }
+            printf("\nThe battle is over....");
+	    if(myarm>0)
+	      {
+	     printf("You won!!!\n%d Ships now hold planet #%d\n",myarm,despla);
+             owner[despla]=mynum;
+	     ships[despla]=myarm;
+	     produ[despla]=produ[despla]-irand(4);
+	     if (produ[despla]<1) produ[despla]=1;
+	      }
+            else
+              {
+	      printf("You LOST!\n%d enemy ships still hold planet #%d\n",
+			desarm,despla);
+	      ships[despla]=desarm;
+              }
+           k=comnum;
+	   k++;
+	   if(k>9) k=0;
+	   combat[k][0]=mynum;
+	   combat[k][1]=despla;
+	   comnum=k;
+	   meslok--;
+           }
+         events[i]=0L;
+         
+        }
+}
+
+lock()
+{
+ int i;
+ i=0;
+ if(meslok<0 || meslok>20) meslok=0;
+ while(meslok>0 && i<5)
+   {
+    i++;
+    sleep(2);
+   }
+ meslok=0;
+ meslok++;
+}
+
+getpub()
+{
+char *ptr;
+int k,type;
+
+k=mymes;
+while(k!=mesnum)
+{
+   k++;
+   if(k > 4)
+      k = 0;
+   if(public[k][0] != mynum)
+      if( public[k][1] == 'P' || public[k][1] == mynum)
+      {
+         type=public[k][1];
+         if(type != 'P') type = 'I';
+         ptr = &public[k][2];
+         if (type == 'I')
+            printf("\nPrivate message from %s]\n\n",names[public[k][0]]);
+         else
+            printf("\nPublic message by %s]\n\n",names[public[k][0]]);
+         printf("%s\n\n",ptr);
+      }
+   }
+mymes=k;
+}
+
+getcom()
+{
+ int k;
+ int defpl,attak,own;
+ k=mycom;
+ while(k!=comnum)
+   {
+    k++;
+    if(k>9) k=0;
+    attak=combat[k][0];
+    own=owner[combat[k][1]];
+    defpl=combat[k][1];
+    if(attak!=mynum)
+   {
+    printf("\nInvasion attempt!\nAttacker:%s]\nPlanet #%d\n",
+		names[attak],defpl);
+    if(own==-1) printf("It remains Neutral\n");
+    if(own==attak) printf("%s] has gained the planet.\n",names[own]);
+    if(own!=attak && own!=-1) printf("%s] retains control.\n",names[own]);
+    if(own==mynum) printf("%d ships still hold your planet %d\n",
+		ships[defpl],defpl);
+   }
+    }
+  mycom=k;
+ prompt();
+}
+
+
+prange(i,j)
+int i,j;
+{
+ float root();
+ float truerange;
+ long tmp1,tmp2,tmp3;
+ int test;
+
+ tmp1= ( xpos[i]-xpos[j]);
+ tmp1=tmp1*tmp1;
+
+ tmp2= ( ypos[i]-ypos[j]);
+ tmp2= ( tmp2*tmp2);
+
+ tmp3= ( zpos[i]-zpos[j]);
+ tmp3=tmp3*tmp3;
+
+ truerange=root(tmp1+tmp2+tmp3);
+ test=truerange;
+ if(test<truerange) test++;
+return(test);
+}
+
+
+compute()
+{
+ int k;
+ int i,j;
+
+ printf("\nPlanet #:");
+ k=getnum(&i);
+ printf("\nPlanet #:");
+ k=getnum(&j);
+ k=prange(i,j);
+
+ printf("Range from %d to %d = %d\n",i,j,k);
+}
+float root(x)
+long x;
+{
+ int z;
+ float e;
+ double y;
+ if(x==0) return(0.0);
+ y=x/2.0;
+ z=0;
+ e = 1.0;
+ while((y*y != x) && e>0.001)
+  {
+   z++;
+   y=(y+x/y)/2;
+   e= y*y - x;
+   if(e < 0.0) e=-e;
+  }
+
+return(y);
+}
+
+flts()
+{
+int i, fltflag;
+extern char *ctime();
+
+fltflag = 0;
+printf("\nFleet  Dest  Size  Arrival\n");
+for(i=0;i<99;i++)
+   if(events[i]!=0L)
+   {
+       fltflag = 1;
+       printf("  %2d    %2d   %4d  %5s\n",
+        i,stack[i][1],stack[i][0],sdate(events[i]));
+   }
+   if (fltflag == 0)
+      printf("\nNo Fleets currently in flight.\n");
+}
+ 
+broadcast()
+{
+ char tmp[100];
+ int ptr,k;
+ ptr=2;
+ printf("\nEnter Broadcast Message:\n>  ");
+ while( (k=getchar())=='\n');
+ while(ptr<100 && k!='\n')
+   {
+    tmp[ptr]=k;
+    ptr++;
+    tmp[ptr]='\0';
+    k=getchar();
+   }
+ tmp[1]='P';
+ tmp[0]=mynum;
+ 
+ lock();
+ k=mesnum+1;
+ if(k>4)k=0;
+ for(ptr=0;ptr<100;ptr++)
+    public[k][ptr]=tmp[ptr];
+ mesnum=k;
+ meslok--;
+ printf("\nMessage Sent.\n");
+}
+
+
+private()
+{
+ char tmp[100];
+ int ptr,k, player;
+
+ ptr=2;
+ printf("\nEnter Private Message:\n>  ");
+  while( (k=getchar())=='\n');
+   while(ptr<100 && k!='\n')
+   {
+    tmp[ptr]=k;
+    ptr++;
+    tmp[ptr]='\0';
+     k=getchar();
+   }
+ printf("\nMessage to (player NUMBER):");
+ k=getnum(&ptr);
+ player = ptr;
+ if ((player < 0) || (player > 10) || (names[player] == '\0'))
+ {
+    printf("Illegal player number.\n");
+    return(0);
+ }
+ tmp[1]=ptr;
+ tmp[0]=mynum;
+ 
+ lock();
+ k=mesnum+1;
+ if(k>4)k=0;
+ for(ptr=0;ptr<100;ptr++)
+    public[k][ptr]=tmp[ptr];
+ mesnum=k;
+ meslok--;
+ printf("\nMessage Sent to %s.\n",names[player]);
+}
+
+send()
+{
+ extern char *ctime();
+ int i,j,k;
+ int from,to;
+
+ i=-1;
+ while(i==-1)
+ {
+ printf("\nFrom world:");
+ i=getnum(&from);
+ if(from <0 || from >49) i=-1;
+ }
+ if (owner[from]!=mynum)
+   {
+    printf("\nYou do not own that world!\n");
+    return(0);
+   }
+ j=-1;
+ while(j==-1)
+ {
+ printf("To world:");
+ j=getnum(&to);
+ if(to<0 || to>49) j=-1;
+ }
+ 
+ for (k=0;events[k]!=0L && k<100; k++);
+
+ if(k==100) 
+  {
+   printf("\nSorry, too many fleets in the air!\n");
+   return(0);
+  }
+
+ printf("Number to send (%d) :",ships[from]);
+ i=getnum(&j);
+
+ if(j>ships[from] || j<1)
+   {
+    printf("Invalid fleet size!");
+    return(0);
+   }
+ 
+ if(owner[from]!=mynum)
+	{
+	 printf("\nYou have lost control of that world!!!\n");
+	 return(0);
+
+	}
+
+ stack[k][0]=j;
+ ships[from]=ships[from]-j;
+ stack[k][1]=to;
+
+ events[k]=time(0)+prange(from,to)*trav_time;
+ printf("\nFleet will arrive at %s\n",sdate(events[k]));
+}
+ 
+list()
+{
+ int i;
+ printf("My worlds:\n");
+ for(i=0;i<50;i++)
+   if(owner[i]==mynum)
+      printf("World #%2d (%2d,%2d,%2d) Prod=%2d Ships=%5d\n",
+          i,xpos[i],ypos[i],zpos[i],produ[i],ships[i]);
+}
+
+/*
+ * kwicklist command
+ */
+kwick()
+{
+int idx;
+
+printf("Kwick list:\n\n");
+for (idx = 0; idx <= 49; idx++)
+{
+   if (owner[idx] == mynum)
+      printf("#%2d Prod:%3d Ships:%5d\n",idx,produ[idx],ships[idx]);
+}
+}
+
+/*
+ * fetch a number from the keyboard
+ */
+getnum(x)
+int *x;
+{
+ char buffer[99];
+ int flag,k,j;
+
+flag=-1;
+ while(flag==-1)
+   {
+    flag=0;
+    j=0;
+    while( (k=getchar())!='\n'  && k!=EOF)
+       {
+        buffer[j]=k;
+        if( isdigit(k)!=1 ) flag=-1;
+        j++;
+        }
+    if(j==0) flag=-1;
+    if(flag==-1) printf("\nA number is expected:");
+     }
+   buffer[j]='\0';
+   j=sscanf(buffer,"%d",x);
+}
+
+/*
+ * getppn() -- fetch the user's PPN number 
+ */
+
+getppn(xx,yy,zz)
+int *xx, *yy, *zz;
+{
+/*
+ *  Set the _PROJ and _PROG values
+ */
+unsigned p,pn;
+
+firqb.fqfun = UU_SYS;
+firqb.fqsizm = 0;
+firqb.fqfil = 0;
+rstsys(_UUO);
+p = firqb.fqprot;
+pn = firqb.fqpflg;
+*xx = abs(p);
+*yy = abs(pn);
+*zz = firqb.fqsizm;
+}
+
+/*
+ * zend() -- send a message to a selected keyboard.  Added at the request
+ *           of Jim Hall
+ */
+zend()
+{
+int keyboard;
+char msg[1024], zendit[1024];
+
+/* Okay, fetch the keyboard # to zend to */
+
+printf("Send to (kb)? ");
+gets(msg);
+if (msg[0] == 0)
+   return(0);		/* no go if null string */
+keyboard = atoi(msg);
+
+/* Check to see if recipient is gagged */
+
+firqb.fqfun = UU_TRM;
+firqb.fqfil = 256 * keyboard;
+firqb.fqppn = 0;
+firqb.fqnam1[0] = 0;
+firqb.fqnam1[1] = 0;
+firqb.fqext = 0;
+firqb.fqsiz = 0;
+firqb.fqbufl = 0;
+firqb.fqmode = 0;
+firqb.fqpflg = 0;
+firqb.fqdev = 0;
+firqb.fqdevn[0] = 0;
+firqb.fqclus = 0;
+rstsys(_UUO);
+if ((swabi(firqb.fqclus) & 255) == 0377)  /* gagged? */
+{
+   printf("?Keyboard %1d is gagged\n",keyboard);
+   return(0);
+}
+
+/* now, send the message! */
+
+printf("Enter your message\n>");
+gets(msg);
+if (msg[0] == 0)
+{
+   printf("Empty message not sent.\n");
+   return(0);
+}
+sprintf(zendit,"\n\r\007([%u,%u])KB%1d:- ",myp,mypn,mykb);
+strcat(zendit,msg);
+strcat(zendit,"\n\r");
+xrb.xrlen = 6;			/* set up the XRB */
+xrb.xrbc = strlen(zendit);
+xrb.xrloc = zendit;
+xrb.xrblkm = 2;
+xrb.xrci = 0;
+xrb.xrblk = keyboard;
+if (rstsys(_SPEC) != 0)
+{
+   printf("Error in Zend, message not sent\n");
+   return(0);
+}
+printf("Message send to keyboard %1d\n",keyboard);
+return(0);
+}
+
+clrgam()
+ {
+	char text[100];
+
+	if (myp!=101 || mypn!=187) return(1);
+	printf("\n(Cleargame): Are you sure:N\010");
+	gets(text);
+	if (toupper(text[0])=='Y')
+	 start = 0;
+ }
